@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Dskripchenko\Oidc\Exceptions\ProviderError;
 use Dskripchenko\Oidc\Groups\GroupClaims;
 use Dskripchenko\Oidc\OidcClient;
+use Dskripchenko\Oidc\Tokens\TokenSet;
 use Dskripchenko\Oidc\UserInfo;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
@@ -41,7 +42,7 @@ it('trades the code for tokens, and reads the userinfo with the access token', f
     $tokens = app(OidcClient::class)->tokens('code-1', 'verifier-1');
     $info = app(OidcClient::class)->userInfo($tokens['access_token']);
 
-    expect($tokens)->toBe(['access_token' => 'at-1', 'id_token' => 'id-1']);
+    expect($tokens)->toBe(['access_token' => 'at-1', 'id_token' => 'id-1', 'refresh_token' => null, 'expires_in' => null]);
 
     expect($info->toArray())->toBe(['sub' => 'u-1', 'email' => 'ada@example.test', 'email_verified' => true, 'name' => 'ada', 'groups' => ['core']])
         ->and($info->verifiedEmail())->toBe('ada@example.test');
@@ -94,3 +95,44 @@ it('reads the groups from the configured claim', function (): void {
     config(['oidc.blocked_group' => '']);
     expect(GroupClaims::blockedGroup())->toBeNull()->and(GroupClaims::blocks(['']))->toBeFalse();
 });
+
+it('keeps the refresh token and the lifetimes the provider gives with the access token', function (): void {
+    fakeProvider(overrides: [TEST_ISSUER.'/token' => Http::response([
+        'access_token' => 'at-1', 'id_token' => 'id-1', 'refresh_token' => 'rt-1', 'expires_in' => 300, 'refresh_expires_in' => '1800',
+    ])]);
+
+    $set = app(OidcClient::class)->exchange('code-1', 'verifier-1');
+
+    expect($set)->toEqual(new TokenSet('at-1', 'id-1', 'rt-1', 300, 1800))
+        ->and(app(OidcClient::class)->tokens('code-1', 'verifier-1'))->toBe(['access_token' => 'at-1', 'id_token' => 'id-1', 'refresh_token' => 'rt-1', 'expires_in' => 300]);
+});
+
+it('reads a token answer leniently but never without an access token', function (): void {
+    expect(TokenSet::fromResponse(['access_token' => '']))->toBeNull()
+        ->and(TokenSet::fromResponse(['refresh_token' => 'rt']))->toBeNull()
+        ->and(TokenSet::fromResponse(['access_token' => 'at', 'id_token' => '', 'refresh_token' => 5, 'expires_in' => 0, 'refresh_expires_in' => 'soon']))
+        ->toEqual(new TokenSet('at'));
+});
+
+it('refreshes the tokens with the client authenticated', function (): void {
+    fakeProvider(overrides: [TEST_ISSUER.'/token' => Http::response(['access_token' => 'at-2', 'refresh_token' => 'rt-2', 'expires_in' => 300])]);
+
+    $set = app(OidcClient::class)->refresh('rt-1');
+
+    expect($set)->toEqual(new TokenSet('at-2', null, 'rt-2', 300));
+    Http::assertSent(fn (HttpRequest $r): bool => $r->url() === TEST_ISSUER.'/token'
+        && $r['grant_type'] === 'refresh_token' && $r['refresh_token'] === 'rt-1'
+        && $r->hasHeader('Authorization', 'Basic '.base64_encode('app:secret')));
+});
+
+it('tells a refused refresh token from a provider that cannot answer', function (mixed $answer, string $reason): void {
+    fakeProvider(overrides: [TEST_ISSUER.'/token' => $answer]);
+
+    expect(fn () => app(OidcClient::class)->refresh('rt-1'))->toThrow(ProviderError::class, "({$reason})");
+})->with([
+    'session ended or person blocked' => [fn () => Http::response(['error' => 'invalid_grant'], 400), 'refresh_rejected'],
+    'client not allowed' => [fn () => Http::response(['error' => 'unauthorized_client'], 401), 'refresh_rejected'],
+    'server error' => [fn () => Http::response('down', 503), 'refresh'],
+    'no access token' => [fn () => Http::response(['token_type' => 'Bearer']), 'refresh'],
+    'unreachable' => [fn () => Http::failedConnection(), 'refresh'],
+]);

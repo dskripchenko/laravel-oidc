@@ -67,7 +67,9 @@ it('starts with a fresh state, verifier and nonce, and finishes once with the co
     expect($result->user->subject)->toBe('u-ada')
         ->and($result->user->verifiedEmail())->toBe('a@b.test')
         ->and($result->context)->toBe(['link' => 7])
-        ->and($result->idToken['nonce'])->toBe($started['nonce']);
+        ->and($result->idToken['nonce'])->toBe($started['nonce'])
+        ->and($result->tokens?->accessToken)->toBe('at-1')
+        ->and($result->tokens?->idToken)->not->toBeNull();
 
     // The state and the nonce were taken out: the same callback again is refused.
     expect(fn () => finish($started, idToken($started['key'], $started['nonce'])))->toThrow(StateMismatch::class);
