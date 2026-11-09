@@ -93,6 +93,40 @@ The leeway is `OIDC_ID_TOKEN_LEEWAY` seconds (`oidc.id_token_leeway`, 60 by
 default): the clock difference forgiven between this server and the
 provider. The validated claims are in `$result->idToken`.
 
+## Calling APIs on behalf of the person
+
+An application that calls another API with the person's access token (a
+backend for its own frontend) keeps the tokens of the sign-in on the server:
+
+```php
+$result = $flow->finish($request);
+$tokens = $result->tokens;            // Dskripchenko\Oidc\Tokens\TokenSet
+// $tokens->accessToken, ->refreshToken, ->expiresIn, ->refreshExpiresIn, ->idToken
+```
+
+Store them encrypted, next to the session, and never send them to the
+browser. When the access token expires, trade the refresh token:
+
+```php
+use Dskripchenko\Oidc\Exceptions\ProviderError;
+
+try {
+    $fresh = app(OidcClient::class)->refresh($stored->refreshToken);
+    // keep $fresh->refreshToken ?? $stored->refreshToken
+} catch (ProviderError $e) {
+    if ($e->reason() === 'refresh_rejected') {
+        // blocked, signed out or the session ended at the provider: end the session here too
+    }
+    // 'refresh': the provider could not answer; try again later
+}
+```
+
+The provider refuses the refresh token (`refresh_rejected`, any 4xx
+answer) of a person it blocked or signed out, or of a session it ended — so
+an application that refreshes on its own schedule follows a block within the
+access token's lifetime. `OidcClient::tokens()` returns the same refresh
+token and lifetime in its array; `exchange()` gives the `TokenSet`.
+
 ## Provider access tokens in an API
 
 ```dotenv
@@ -186,7 +220,8 @@ and only if `GroupSync::followsGroups()`.
 ## Exceptions
 
 All implement `Exceptions\OidcException` with a short `reason()`:
-`ProviderError` (`discovery`, `endpoint`, `token`, `userinfo`, `callback`),
+`ProviderError` (`discovery`, `endpoint`, `token`, `refresh`, `refresh_rejected`,
+`userinfo`, `callback`),
 `StateMismatch` (`state`), `TokenRejected` (401, reasons above),
 `TooManyAttempts` (429).
 

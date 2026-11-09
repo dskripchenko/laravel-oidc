@@ -71,18 +71,18 @@ final readonly class SignInFlow
             throw new ProviderError('callback');
         }
         $context = is_array($expected['context'] ?? null) ? $expected['context'] : [];
-        $tokens = $this->client->tokens($request->string('code')->toString(), $verifier);
-        if ($tokens['id_token'] === null) {
+        $tokens = $this->client->exchange($request->string('code')->toString(), $verifier);
+        if ($tokens->idToken === null) {
             throw new ProviderError('id_token_missing');
         }
-        $claims = $this->idTokens->validate($tokens['id_token'], $nonce);
-        $user = $this->client->userInfo($tokens['access_token']);
+        $claims = $this->idTokens->validate($tokens->idToken, $nonce);
+        $user = $this->client->userInfo($tokens->accessToken);
         // The userinfo speaks for the person the ID token names, or for nobody.
         if ($claims['sub'] !== $user->subject) {
             throw new ProviderError('sub_mismatch');
         }
 
         /** @var array<string, mixed> $context */
-        return new SignInResult($user, $context, $claims);
+        return new SignInResult($user, $context, $claims, $tokens);
     }
 }

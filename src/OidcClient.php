@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Dskripchenko\Oidc;
 
 use Dskripchenko\Oidc\Exceptions\ProviderError;
+use Dskripchenko\Oidc\Tokens\TokenSet;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as Http;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 
 /**
  * An OpenID Connect provider through the authorization code flow with PKCE
@@ -82,31 +85,64 @@ final readonly class OidcClient
      * Trades the code for the provider's tokens. The ID token is to be
      * validated (SignIn\IdTokens) before the access token is used.
      *
-     * @return array{access_token: string, id_token: string|null}
+     * @return array{access_token: string, id_token: string|null, refresh_token: string|null, expires_in: int|null}
      *
      * @throws ProviderError
      */
     public function tokens(string $code, string $verifier): array
     {
-        try {
-            $response = $this->http->asForm()->acceptJson()->timeout(15)
-                ->withBasicAuth(self::setting('client_id'), self::setting('client_secret'))
-                ->post($this->endpoint('token_endpoint'), [
-                    'grant_type' => 'authorization_code',
-                    'code' => $code,
-                    'redirect_uri' => $this->redirectUri(),
-                    'code_verifier' => $verifier,
-                ])->throw();
-        } catch (RequestException) {
-            throw new ProviderError('token');
-        }
-        $access = $response->json('access_token');
-        $id = $response->json('id_token');
-        if (! is_string($access) || $access === '') {
-            throw new ProviderError('token');
-        }
+        $set = $this->exchange($code, $verifier);
 
-        return ['access_token' => $access, 'id_token' => is_string($id) && $id !== '' ? $id : null];
+        return ['access_token' => $set->accessToken, 'id_token' => $set->idToken, 'refresh_token' => $set->refreshToken, 'expires_in' => $set->expiresIn];
+    }
+
+    /**
+     * Trades the code for the provider's tokens, as a set.
+     *
+     * @throws ProviderError token
+     */
+    public function exchange(string $code, string $verifier): TokenSet
+    {
+        try {
+            $response = $this->tokenRequest([
+                'grant_type' => 'authorization_code',
+                'code' => $code,
+                'redirect_uri' => $this->redirectUri(),
+                'code_verifier' => $verifier,
+            ])->throw();
+        } catch (RequestException|ConnectionException) {
+            throw new ProviderError('token');
+        }
+        $answer = $response->json();
+
+        return TokenSet::fromResponse(is_array($answer) ? $answer : []) ?? throw new ProviderError('token');
+    }
+
+    /**
+     * New tokens for a refresh token (RFC 6749, 6). The answer may carry a
+     * new refresh token — keep it instead of the old one — or none: the old
+     * one stays good.
+     *
+     * The provider refuses the refresh token of a person it blocked or
+     * signed out, or of a session it ended: `refresh_rejected`, and the
+     * person has to sign in again. A provider that cannot be reached or
+     * answers with a server error is `refresh`: try again later.
+     *
+     * @throws ProviderError refresh_rejected, refresh
+     */
+    public function refresh(string $refreshToken): TokenSet
+    {
+        try {
+            $response = $this->tokenRequest(['grant_type' => 'refresh_token', 'refresh_token' => $refreshToken]);
+        } catch (ConnectionException) {
+            throw new ProviderError('refresh');
+        }
+        if ($response->clientError()) {
+            throw new ProviderError('refresh_rejected');
+        }
+        $answer = $response->successful() ? $response->json() : null;
+
+        return TokenSet::fromResponse(is_array($answer) ? $answer : []) ?? throw new ProviderError('refresh');
     }
 
     /**
@@ -142,6 +178,21 @@ final readonly class OidcClient
         }
 
         return $url;
+    }
+
+    /**
+     * A request to the token endpoint, the client authenticated with its secret.
+     *
+     * @param  array<string, string>  $form
+     *
+     * @throws ProviderError endpoint, discovery
+     * @throws ConnectionException
+     */
+    private function tokenRequest(array $form): Response
+    {
+        return $this->http->asForm()->acceptJson()->timeout(15)
+            ->withBasicAuth(self::setting('client_id'), self::setting('client_secret'))
+            ->post($this->endpoint('token_endpoint'), $form);
     }
 
     /**

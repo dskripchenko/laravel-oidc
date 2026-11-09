@@ -6,6 +6,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-09
+
+### Added
+- `Tokens\TokenSet`: the tokens of one answer of the token endpoint — the
+  access token, the ID token, the refresh token and the lifetimes
+  (`expires_in`, `refresh_expires_in`).
+- `OidcClient::exchange()`: the code traded for a `TokenSet`.
+- `OidcClient::refresh()`: new tokens for a refresh token; a refusal of the
+  provider (any 4xx) is `ProviderError` `refresh_rejected`, an unreachable
+  provider or a server error is `refresh`.
+- `SignInResult::$tokens`: the sign-in's `TokenSet`, for applications that
+  call APIs on behalf of the person.
+
+### Changed
+- `OidcClient::tokens()` also returns `refresh_token` and `expires_in`; a
+  provider that cannot be reached is now `ProviderError` `token` too.
+
 ## [0.1.0] — 2026-11-09
 
 First release.
@@ -46,5 +63,6 @@ First release.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
 
-[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dskripchenko/laravel-oidc/releases/tag/v0.1.0
