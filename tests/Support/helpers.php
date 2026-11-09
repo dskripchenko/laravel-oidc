@@ -105,9 +105,25 @@ function fakeProvider(array $keys = [], array $userinfo = ['sub' => 'u-ada'], st
             'userinfo_endpoint' => TEST_ISSUER.'/userinfo',
             'jwks_uri' => TEST_ISSUER.'/jwks',
         ]),
-        TEST_ISSUER.'/token' => Http::response(['access_token' => 'at-1', 'token_type' => 'Bearer']),
+        // The ID token the test put in `test.id_token`, if any.
+        TEST_ISSUER.'/token' => static fn () => Http::response(array_filter([
+            'access_token' => 'at-1', 'token_type' => 'Bearer', 'id_token' => app()->bound('test.id_token') ? app('test.id_token') : null,
+        ])),
         TEST_ISSUER.'/userinfo' => Http::response($userinfo),
         TEST_ISSUER.'/jwks' => static fn () => app('test.down') === true ? Http::response('down', 503) : Http::response(['keys' => app('test.jwks')]),
         ...$overrides,
     ]);
+}
+
+/**
+ * An ID token of TEST_ISSUER for the client `app`, as a provider signs it.
+ *
+ * @param  array<string, mixed>  $claims
+ * @param  array<string, mixed>  $header
+ */
+function idToken(OpenSSLAsymmetricKey $key, string $nonce, array $claims = [], array $header = []): string
+{
+    return testJwt($key, 'sign', [
+        'aud' => 'app', 'azp' => null, 'sub' => 'u-ada', 'iat' => time(), 'exp' => time() + 300, 'nonce' => $nonce, ...$claims,
+    ], ['typ' => 'JWT', ...$header]);
 }

@@ -16,6 +16,9 @@ return [
     'redirect' => env('OIDC_REDIRECT_URI'),
     'callback_path' => '/auth/oidc/callback',
     'scopes' => env('OIDC_SCOPES', 'openid profile email'),
+    // Seconds of clock difference forgiven when the ID token's `exp` and
+    // `iat` are checked.
+    'id_token_leeway' => env('OIDC_ID_TOKEN_LEEWAY', 60),
 
     // The claim with the person's groups (userinfo and access tokens). Ask
     // the provider for it in the scopes ("groups" for Authelia, Keycloak

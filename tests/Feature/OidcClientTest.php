@@ -34,10 +34,14 @@ it('sends the person to the provider with PKCE S256, the state and the nonce', f
     expect(app(OidcClient::class)->redirectUri())->toBe('https://app.example.test/back');
 });
 
-it('trades the code for the userinfo', function (): void {
+it('trades the code for tokens, and reads the userinfo with the access token', function (): void {
     fakeProvider([], ['sub' => 'u-1', 'email' => ' Ada@Example.TEST ', 'email_verified' => true, 'preferred_username' => 'ada', 'groups' => ['core', 7]]);
+    app()->instance('test.id_token', 'id-1');
 
-    $info = app(OidcClient::class)->exchange('code-1', 'verifier-1');
+    $tokens = app(OidcClient::class)->tokens('code-1', 'verifier-1');
+    $info = app(OidcClient::class)->userInfo($tokens['access_token']);
+
+    expect($tokens)->toBe(['access_token' => 'at-1', 'id_token' => 'id-1']);
 
     expect($info->toArray())->toBe(['sub' => 'u-1', 'email' => 'ada@example.test', 'email_verified' => true, 'name' => 'ada', 'groups' => ['core']])
         ->and($info->verifiedEmail())->toBe('ada@example.test');
@@ -57,11 +61,12 @@ it('takes the email as verified only when the provider says so outright', functi
 it('fails when the provider does not answer as expected', function (string $url, array $body, int $status, string $reason): void {
     fakeProvider(overrides: [TEST_ISSUER.$url => Http::response($body, $status)]);
 
-    expect(fn () => app(OidcClient::class)->exchange('c', 'v'))->toThrow(ProviderError::class, "({$reason})");
+    expect(fn () => app(OidcClient::class)->userInfo(app(OidcClient::class)->tokens('c', 'v')['access_token']))->toThrow(ProviderError::class, "({$reason})");
 })->with([
     'no access token' => ['/token', ['token_type' => 'Bearer'], 200, 'token'],
     'token refused' => ['/token', ['error' => 'invalid_grant'], 400, 'token'],
     'userinfo without sub' => ['/userinfo', ['email' => 'a@b.test'], 200, 'userinfo'],
+    'userinfo refused' => ['/userinfo', ['error' => 'invalid_token'], 401, 'userinfo'],
 ]);
 
 it('takes the discovery document only for the configured issuer', function (): void {

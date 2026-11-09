@@ -10,7 +10,8 @@ use RuntimeException;
  * The provider did not answer as expected: discovery, the code exchange,
  * userinfo, a missing endpoint, or an error sent back to the callback.
  *
- * Reasons: `discovery`, `endpoint`, `token`, `userinfo`, `callback`.
+ * Reasons: `discovery`, `endpoint`, `token`, `userinfo`, `callback`,
+ * `id_token_missing`, `id_token_invalid`, `nonce_mismatch`, `sub_mismatch`.
  */
 final class ProviderError extends RuntimeException implements OidcException
 {

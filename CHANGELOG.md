@@ -13,11 +13,20 @@ First release.
 ### Added
 - `OidcClient`: discovery (kept an hour, taken only for the configured
   issuer), the authorization URL with PKCE S256, state and nonce, the code
-  exchange and userinfo (`UserInfo`, `verifiedEmail()` only for
-  `email_verified: true`).
-- `SignIn\SignInFlow`: `start()` keeps the state and verifier in the session,
-  `finish()` checks the state once and trades the code (`SignInResult` with
-  the context given at the start).
+  exchange (`tokens()`) and the userinfo (`userInfo()`: `UserInfo`,
+  `verifiedEmail()` only for `email_verified: true`).
+- `SignIn\SignInFlow`: `start()` keeps the state, PKCE verifier and nonce in
+  the session; `finish()` checks the state once, trades the code, requires
+  and validates the ID token (`SignIn\IdTokens`), then reads the userinfo,
+  which must name the same `sub` (`SignInResult` with the userinfo, the
+  context given at the start and the ID token's claims).
+- ID token validation: RS256 or ES256 by a key of the issuer's JWKS (never
+  `none`), `iss`, `aud` holding the client ID (and `azp` the client ID with
+  several audiences or any `azp`), `exp` and `iat` within
+  `oidc.id_token_leeway` (`OIDC_ID_TOKEN_LEEWAY`, 60 s by default), `sub`,
+  and the session's nonce. Failures: `ProviderError` with
+  `id_token_missing`, `id_token_invalid`, `nonce_mismatch`, `sub_mismatch`.
+- `IssuerKeys`: the issuer's JWKS for ID tokens and access tokens alike.
 - `Jose\Jwt`, `Jose\Jwk`: JWS compact tokens checked with OpenSSL —
   RS256/384/512, ES256/384/512 on their own curves, RSA keys from 2048 bits;
   never `none` or HMAC.

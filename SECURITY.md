@@ -21,8 +21,10 @@ the release is out, and credited in the changelog unless you ask otherwise.
 ## Security model in short
 
 - Sign-in: authorization code flow with PKCE S256; the state is compared in constant
-  time and taken out of the session, so a callback works once. The discovery document
-  is taken only when its `issuer` is the configured one.
+  time and, with the nonce, taken out of the session, so a callback works once. The ID
+  token is required and validated (RS256/ES256 against the JWKS, `iss`, `aud`/`azp`,
+  `exp`/`iat`, nonce); the userinfo must name its `sub`. The discovery document is
+  taken only when its `issuer` is the configured one.
 - Only an email the provider marks `email_verified: true` is offered for matching
   accounts (`UserInfo::verifiedEmail()`).
 - Provider access tokens: asymmetric signatures only (RS/ES 256/384/512, EC keys on the

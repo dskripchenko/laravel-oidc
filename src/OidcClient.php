@@ -11,9 +11,8 @@ use Illuminate\Http\Client\RequestException;
 
 /**
  * An OpenID Connect provider through the authorization code flow with PKCE
- * (S256). Who signed in is read from the userinfo endpoint with the access
- * token the provider gave over TLS to this server, so the ID token is not
- * needed here.
+ * (S256): its endpoints, the code traded for tokens, and the userinfo. The
+ * whole sign-in, with the ID token validated, is SignIn\SignInFlow.
  *
  * The discovery document is kept an hour, and is taken only when its
  * `issuer` is the configured one: a document of another issuer speaks for
@@ -80,28 +79,48 @@ final readonly class OidcClient
     }
 
     /**
-     * Trades the code for the person's userinfo.
+     * Trades the code for the provider's tokens. The ID token is to be
+     * validated (SignIn\IdTokens) before the access token is used.
+     *
+     * @return array{access_token: string, id_token: string|null}
      *
      * @throws ProviderError
      */
-    public function exchange(string $code, string $verifier): UserInfo
+    public function tokens(string $code, string $verifier): array
     {
         try {
-            $token = $this->http->asForm()->acceptJson()->timeout(15)
+            $response = $this->http->asForm()->acceptJson()->timeout(15)
                 ->withBasicAuth(self::setting('client_id'), self::setting('client_secret'))
                 ->post($this->endpoint('token_endpoint'), [
                     'grant_type' => 'authorization_code',
                     'code' => $code,
                     'redirect_uri' => $this->redirectUri(),
                     'code_verifier' => $verifier,
-                ])->throw()->json('access_token');
-            if (! is_string($token) || $token === '') {
-                throw new ProviderError('token');
-            }
-            $info = $this->http->acceptJson()->timeout(15)->withToken($token)
-                ->get($this->endpoint('userinfo_endpoint'))->throw()->json();
+                ])->throw();
         } catch (RequestException) {
             throw new ProviderError('token');
+        }
+        $access = $response->json('access_token');
+        $id = $response->json('id_token');
+        if (! is_string($access) || $access === '') {
+            throw new ProviderError('token');
+        }
+
+        return ['access_token' => $access, 'id_token' => is_string($id) && $id !== '' ? $id : null];
+    }
+
+    /**
+     * The person's claims from the userinfo endpoint.
+     *
+     * @throws ProviderError
+     */
+    public function userInfo(string $accessToken): UserInfo
+    {
+        try {
+            $info = $this->http->acceptJson()->timeout(15)->withToken($accessToken)
+                ->get($this->endpoint('userinfo_endpoint'))->throw()->json();
+        } catch (RequestException) {
+            throw new ProviderError('userinfo');
         }
         if (! is_array($info) || ! is_string($info['sub'] ?? null) || $info['sub'] === '') {
             throw new ProviderError('userinfo');

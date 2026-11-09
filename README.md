@@ -3,7 +3,8 @@
 OpenID Connect for Laravel, without a JOSE library:
 
 - **Sign-in** through the authorization code flow with PKCE (S256), a state
-  and a nonce kept in the session, the code traded for the person's userinfo.
+  and a nonce kept in the session, the ID token validated against the
+  issuer's JWKS, then the person's userinfo.
 - **Provider access tokens for an API**: an outside client signed in through
   the same provider calls the API with the provider's token (a JWT), checked
   against the issuer's JWKS — RS256/384/512 and ES256/384/512 only, never
@@ -52,9 +53,9 @@ Route::get('/auth/oidc/redirect', function (Request $request, SignInFlow $flow) 
 
 Route::get('/auth/oidc/callback', function (Request $request, SignInFlow $flow) {
     try {
-        $result = $flow->finish($request);         // state checked, code traded
+        $result = $flow->finish($request);         // state, ID token, userinfo checked
     } catch (OidcException $e) {
-        return redirect('/login?sso='.$e->reason()); // state, callback, token, ...
+        return redirect('/login?sso='.$e->reason()); // state, nonce_mismatch, ...
     }
     $info = $result->user;                          // Dskripchenko\Oidc\UserInfo
     $user = User::firstWhere('oidc_subject', $info->subject)
@@ -73,9 +74,24 @@ null when absent) and the raw `claims`. `verifiedEmail()` returns the email
 only when the provider says `email_verified: true` — an address it does not
 vouch for may be anyone's typing and must not match an account.
 
-The callback state is taken out of the session, so a callback works once.
-The ID token is not used: the userinfo endpoint is called with the access
-token the provider gave this server over TLS.
+The state and the nonce are taken out of the session, so a callback works
+once. `finish()` requires an ID token in the token response and validates it
+(OpenID Connect Core, 3.1.3.7) before the userinfo is read:
+
+| Check | Reason of the `ProviderError` |
+|---|---|
+| the token response has an `id_token` | `id_token_missing` |
+| signed with RS256 or ES256 by a key of the issuer's JWKS (by `kid`); never `none`, HMAC or another algorithm | `id_token_invalid` |
+| `iss` is the configured issuer | `id_token_invalid` |
+| `aud` holds `OIDC_CLIENT_ID`; with several audiences, or any `azp`, `azp` is `OIDC_CLIENT_ID` | `id_token_invalid` |
+| `exp` not passed and `iat` not in the future, give or take the leeway | `id_token_invalid` |
+| a non-empty `sub` | `id_token_invalid` |
+| `nonce` is the one this sign-in started with | `nonce_mismatch` |
+| the userinfo's `sub` is the ID token's | `sub_mismatch` |
+
+The leeway is `OIDC_ID_TOKEN_LEEWAY` seconds (`oidc.id_token_leeway`, 60 by
+default): the clock difference forgiven between this server and the
+provider. The validated claims are in `$result->idToken`.
 
 ## Provider access tokens in an API
 
@@ -120,7 +136,7 @@ own sign-in is not one for the API — unless
 `JWT` (Keycloak) need `OIDC_API_TOKEN_TYPES=at+jwt,JWT`; the audience and the
 client list still keep their ID tokens out.
 
-**JWKS.** Fetched from the discovery document's `jwks_uri` through the
+**JWKS.** The same keys as for ID tokens (`IssuerKeys`). Fetched from the discovery document's `jwks_uri` through the
 `OutboundHttp` contract and kept an hour. An unknown `kid` refetches at most
 once a minute: a rotated key is picked up, a stream of made-up key IDs does
 not make the server call out. A failed fetch is remembered for 30 seconds.

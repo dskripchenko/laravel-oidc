@@ -14,9 +14,11 @@ final readonly class SignInResult
 {
     /**
      * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $idToken  The validated ID token's claims
      */
     public function __construct(
         public UserInfo $user,
         public array $context,
+        public array $idToken = [],
     ) {}
 }
