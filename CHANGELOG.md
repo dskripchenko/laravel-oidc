@@ -45,3 +45,6 @@ First release.
   `EloquentSubjectUsers`, `NullGroupSync`, `PlainOutboundHttp`.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
+
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dskripchenko/laravel-oidc/releases/tag/v0.1.0
