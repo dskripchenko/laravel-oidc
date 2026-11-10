@@ -29,11 +29,15 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Rejections are counted per address: after 30 in a minute the address
  * gets 429 (TooManyAttempts) until the minute is over, and only the first
- * 5 of a minute dispatch ProviderTokenRejected.
+ * 5 of a minute dispatch ProviderTokenRejected. A genuine token of a known
+ * client that is refused (expired, an unknown person…) is counted for its
+ * holder — the client and the person — instead: a service that calls on
+ * behalf of many people from one address is not slowed down for all of
+ * them by a few.
  */
 final readonly class AuthenticateProviderToken
 {
-    /** Rejected tokens from one address a minute before it is slowed down. */
+    /** Rejected tokens from one address (or one holder) a minute before it is slowed down. */
     public const int FAILURES_PER_MINUTE = 30;
 
     /** Rejected tokens from one address a minute that dispatch an event. */
@@ -75,6 +79,13 @@ final readonly class AuthenticateProviderToken
         try {
             return $this->tokens->verify($bearer);
         } catch (TokenRejected $e) {
+            $holder = $e->holder();
+            if ($holder !== null) {
+                $key = 'oidc-provider-token-failed:holder:'.$holder;
+                if ($this->limiter->tooManyAttempts($key, self::FAILURES_PER_MINUTE)) {
+                    throw new TooManyAttempts($this->limiter->availableIn($key));
+                }
+            }
             $this->limiter->hit($key, 60);
             // The first few of a minute are enough to see what happens.
             if ($this->limiter->attempts($key) <= self::REPORTED_PER_MINUTE) {

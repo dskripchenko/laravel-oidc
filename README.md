@@ -176,9 +176,15 @@ once a minute: a rotated key is picked up, a stream of made-up key IDs does
 not make the server call out. A failed fetch is remembered for 30 seconds.
 
 **Rate limit.** After 30 rejected tokens from one address in a minute the
-address gets 429 (`TooManyAttempts`, `Retry-After`). The first 5 rejections
-of a minute dispatch `ProviderTokenRejected` with the reason and the IP —
-never the token or its claims — for your audit log.
+address gets 429 (`TooManyAttempts`, `Retry-After`). A genuine token — signed
+by the provider, for your audience and a known client — that is still refused
+(`expired`, `not_yet`, `subject`, `groups_stale`) is counted for its holder,
+the client and the person, not for the address: a service calling on behalf
+of many people from one address is not slowed down for all of them because
+of a few. Claims of a token that did not pass the signature, issuer, audience
+and client checks are never trusted for this. The first 5 rejections of a
+minute (per address or holder) dispatch `ProviderTokenRejected` with the
+reason and the IP — never the token or its claims — for your audit log.
 
 The token grants nothing by itself: decide what a request with
 `ProviderAccessToken::of($request) !== null` may do. Do not mint your own

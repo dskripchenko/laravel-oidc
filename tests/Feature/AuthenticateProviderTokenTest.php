@@ -65,6 +65,39 @@ it('reports the first rejections of a minute and slows down an address that keep
     $this->getJson('/who', ['Authorization' => "Bearer {$forged}"])->assertStatus(401);
 });
 
+it('counts a genuine token\'s refusals for its holder, not for the address it comes from', function (): void {
+    Event::fake([ProviderTokenRejected::class]);
+    [$key, $jwk] = testKey('k1');
+    fakeProvider([$jwk]);
+    // A service calling for many people from one address: one of them is not known here.
+    $stranger = testJwt($key, 'k1', ['sub' => 'u-nobody']);
+
+    for ($i = 0; $i < AuthenticateProviderToken::FAILURES_PER_MINUTE; $i++) {
+        $this->getJson('/who', ['Authorization' => "Bearer {$stranger}"])->assertStatus(401);
+    }
+    $this->getJson('/who', ['Authorization' => "Bearer {$stranger}"])->assertStatus(429)->assertHeader('Retry-After');
+
+    // The others of that service, from the same address, go on.
+    $this->getJson('/who', ['Authorization' => 'Bearer '.testJwt($key, 'k1')])->assertOk()->assertJsonPath('user', 1);
+    $this->getJson('/who', ['Authorization' => 'Bearer '.testJwt($key, 'k1', ['sub' => 'u-other'])])->assertStatus(401);
+    Event::assertDispatched(ProviderTokenRejected::class, static fn (ProviderTokenRejected $e): bool => $e->reason === 'subject');
+
+    $this->travel(61)->seconds();
+    $this->getJson('/who', ['Authorization' => "Bearer {$stranger}"])->assertStatus(401);
+});
+
+it('does not trust what an unsigned token says about its holder', function (): void {
+    [$key, $jwk] = testKey('k1');
+    [$forger] = testKey('k1');
+    fakeProvider([$jwk]);
+
+    // Forged tokens with ever new subjects still count against the address.
+    for ($i = 0; $i < AuthenticateProviderToken::FAILURES_PER_MINUTE; $i++) {
+        $this->getJson('/who', ['Authorization' => 'Bearer '.testJwt($forger, 'k1', ['sub' => 'u-'.$i])])->assertStatus(401);
+    }
+    $this->getJson('/who', ['Authorization' => 'Bearer '.testJwt($key, 'k1')])->assertStatus(429);
+});
+
 it('signs in on the configured guard', function (): void {
     [$key, $jwk] = testKey('k1');
     fakeProvider([$jwk]);
