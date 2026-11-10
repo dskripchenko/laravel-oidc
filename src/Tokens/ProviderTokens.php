@@ -129,18 +129,20 @@ final readonly class ProviderTokens
         if (! is_string($client) || ! in_array($client, self::clients(), true)) {
             throw new TokenRejected('client');
         }
+        // Signed by the provider for a known client: refusals from here on are the holder's.
+        $sub = is_string($claims['sub'] ?? null) ? $claims['sub'] : '';
+        $holder = hash('sha256', $issuer."\n".$client."\n".$sub);
         if (! is_int($claims['exp'] ?? null) || $now > $claims['exp'] + self::LEEWAY) {
-            throw new TokenRejected('expired');
+            throw new TokenRejected('expired', $holder);
         }
         if (is_int($claims['nbf'] ?? null) && $now < $claims['nbf'] - self::LEEWAY) {
-            throw new TokenRejected('not_yet');
+            throw new TokenRejected('not_yet', $holder);
         }
-        $sub = $claims['sub'] ?? null;
-        if (! is_string($sub) || $sub === '') {
-            throw new TokenRejected('subject');
+        if ($sub === '') {
+            throw new TokenRejected('subject', $holder);
         }
-        $user = $this->users->find($issuer, $sub) ?? throw new TokenRejected('subject');
-        $user = $this->followGroups($user, $issuer, $sub, GroupClaims::of($claims));
+        $user = $this->users->find($issuer, $sub) ?? throw new TokenRejected('subject', $holder);
+        $user = $this->followGroups($user, $issuer, $sub, GroupClaims::of($claims), $holder);
 
         return new VerifiedToken($user, new ProviderAccessToken($issuer, $sub, mb_substr($client, 0, 100), $claims['exp']), $claims);
     }
@@ -151,7 +153,7 @@ final readonly class ProviderTokens
      *
      * @param  list<string>|null  $groups
      */
-    private function followGroups(Authenticatable $user, string $issuer, string $sub, ?array $groups): Authenticatable
+    private function followGroups(Authenticatable $user, string $issuer, string $sub, ?array $groups, string $holder): Authenticatable
     {
         if ($groups === null) {
             $maxAge = config('oidc.api_sync_max_age', 24);
@@ -159,7 +161,7 @@ final readonly class ProviderTokens
             if ($this->groups->followsGroups()) {
                 $synced = $this->groups->syncedAt($user);
                 if ($synced === null || $synced->getTimestamp() < now()->subHours($hours)->getTimestamp()) {
-                    throw new TokenRejected('groups_stale');
+                    throw new TokenRejected('groups_stale', $holder);
                 }
             }
 
@@ -172,12 +174,12 @@ final readonly class ProviderTokens
         }
         // The provider's "blocked" group: the token is not taken.
         if (! $this->groups->sync($user, $groups)) {
-            throw new TokenRejected('subject');
+            throw new TokenRejected('subject', $holder);
         }
         $this->cache->put($key, $seen, self::GROUPS_FOR);
 
         // The groups may have blocked the person.
-        return $this->users->find($issuer, $sub) ?? throw new TokenRejected('subject');
+        return $this->users->find($issuer, $sub) ?? throw new TokenRejected('subject', $holder);
     }
 
     /**

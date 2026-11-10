@@ -6,6 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-11-10
+
+### Changed
+- Refusals of a genuine provider token (signed, for the audience and a known
+  client: `expired`, `not_yet`, `subject`, `groups_stale`) are rate limited
+  per holder — the client and the person — instead of per address. A service
+  that calls on behalf of many people from one address is no longer slowed
+  down for all of them by a few without an account. Untrusted tokens are
+  still counted per address.
+
+### Added
+- `TokenRejected::holder()`: a hash of the issuer, the client and the person
+  of a genuine token that was refused; null when the token is not trusted.
+
 ## [0.2.0] — 2026-11-09
 
 ### Added
@@ -63,6 +77,7 @@ First release.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
 
-[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dskripchenko/laravel-oidc/releases/tag/v0.1.0
