@@ -203,3 +203,13 @@ it('is off unless the application takes provider tokens', function (): void {
     config(['oidc.api_tokens' => true, 'oidc.issuer' => null]);
     expect(ProviderTokens::enabled())->toBeFalse();
 });
+
+it('names the scopes the token was issued with', function (): void {
+    [$key, $jwk] = testKey('k1');
+    fakeProvider([$jwk]);
+    people();
+    expect(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => 'openid  manage profile']))->token->scopes)->toBe(['openid', 'manage', 'profile'])
+        ->and(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => 'openid manage']))->token->hasScope('manage'))->toBeTrue()
+        ->and(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => 'openid managed']))->token->hasScope('manage'))->toBeFalse()
+        ->and(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => null]))->token->scopes)->toBe([]);
+});

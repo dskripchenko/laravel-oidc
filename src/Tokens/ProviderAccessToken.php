@@ -20,13 +20,21 @@ final readonly class ProviderAccessToken
     /**
      * @param  string  $client  The client that holds it (`azp`, else `client_id`), at most 100 characters
      * @param  int  $expiresAt  When it ends (its `exp`, Unix seconds)
+     * @param  list<string>  $scopes  The scopes it was issued with (its `scope`, space-separated in the token)
      */
     public function __construct(
         public string $issuer,
         public string $subject,
         public string $client,
         public int $expiresAt,
+        public array $scopes = [],
     ) {}
+
+    /** Whether the token was issued with the scope, named exactly. */
+    public function hasScope(string $scope): bool
+    {
+        return in_array($scope, $this->scopes, true);
+    }
 
     /** The accepted provider's token the request came with, if any. */
     public static function of(Request $request): ?self
