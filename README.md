@@ -147,6 +147,10 @@ Route::middleware([AuthenticateProviderToken::class, 'auth:sanctum'])->get('/api
 });
 ```
 
+The token also names its scopes (`$token->scopes`, `$token->hasScope('manage')`)
+from its `scope` claim — a scope matched by its exact name, never by a prefix —
+so an action can ask for one the provider grants only to some clients.
+
 A bearer that looks like a JWT is checked; any other bearer passes through to
 your own tokens. A JWT that does not pass gets 401 (`TokenRejected`), never a
 second try as something else. A token is taken when:

@@ -144,7 +144,7 @@ final readonly class ProviderTokens
         $user = $this->users->find($issuer, $sub) ?? throw new TokenRejected('subject', $holder);
         $user = $this->followGroups($user, $issuer, $sub, GroupClaims::of($claims), $holder);
 
-        return new VerifiedToken($user, new ProviderAccessToken($issuer, $sub, mb_substr($client, 0, 100), $claims['exp']), $claims);
+        return new VerifiedToken($user, new ProviderAccessToken($issuer, $sub, mb_substr($client, 0, 100), $claims['exp'], self::scopes($claims['scope'] ?? null)), $claims);
     }
 
     /**
@@ -190,5 +190,18 @@ final readonly class ProviderTokens
         $items = array_map(trim(...), explode(',', is_string($setting) ? $setting : ''));
 
         return array_values(array_filter($items, static fn (string $item): bool => $item !== ''));
+    }
+
+    /**
+     * The token's scopes: the `scope` claim split on spaces (RFC 9068); an
+     * array is taken as is; anything else is none.
+     *
+     * @return list<string>
+     */
+    private static function scopes(mixed $claim): array
+    {
+        $parts = is_string($claim) ? preg_split('/\s+/', trim($claim)) : (is_array($claim) ? $claim : []);
+
+        return array_values(array_unique(array_filter($parts === false ? [] : $parts, static fn (mixed $s): bool => is_string($s) && $s !== '' && strlen($s) <= 200)));
     }
 }
