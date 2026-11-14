@@ -39,7 +39,8 @@ return [
     'api_audience' => env('OIDC_API_AUDIENCE'),
     'api_audience_same_as_client' => (bool) env('OIDC_API_AUDIENCE_SAME_AS_CLIENT', false),
     // The clients whose tokens are taken: their client IDs (`azp`, else
-    // `client_id` of the token), comma-separated. Required.
+    // `client_id` of the token), comma-separated. Required. An entry ending
+    // in `*` takes every client with that prefix (`agent-*`); a lone `*` none.
     'api_clients' => env('OIDC_API_CLIENTS'),
     // The header types (`typ`) of an access token, comma-separated; RFC
     // 9068's `at+jwt` by default. Add `JWT` for a provider that marks its
