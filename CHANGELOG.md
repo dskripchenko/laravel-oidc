@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-15
+
+### Added
+- `OIDC_API_CLIENTS` takes prefix patterns: an entry ending in `*`
+  (`agent-*`) takes every client with that prefix — clients an application
+  makes on the fly, such as one service account per agent. A lone `*` takes
+  none. `ProviderTokens::knownClient()` tells whether a client is taken.
+
 ## [0.4.0] — 2026-11-11
 
 ### Added

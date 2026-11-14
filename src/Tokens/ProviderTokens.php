@@ -84,6 +84,27 @@ final readonly class ProviderTokens
     }
 
     /**
+     * Whether the client is one whose tokens are taken: named exactly, or by
+     * a prefix pattern ending in `*` (`agent-*` — clients an application
+     * makes on the fly, all under one prefix). A lone `*` takes no client.
+     */
+    public static function knownClient(string $client): bool
+    {
+        foreach (self::clients() as $known) {
+            if (str_ends_with($known, '*')) {
+                $prefix = substr($known, 0, -1);
+                if ($prefix !== '' && strlen($client) > strlen($prefix) && str_starts_with($client, $prefix)) {
+                    return true;
+                }
+            } elseif ($known === $client) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * The header types of an access token taken (`oidc.api_token_types`,
      * by default only RFC 9068's `at+jwt`), lower case.
      *
@@ -126,7 +147,7 @@ final readonly class ProviderTokens
             throw new TokenRejected('audience');
         }
         $client = $claims['azp'] ?? $claims['client_id'] ?? null;
-        if (! is_string($client) || ! in_array($client, self::clients(), true)) {
+        if (! is_string($client) || ! self::knownClient($client)) {
             throw new TokenRejected('client');
         }
         // Signed by the provider for a known client: refusals from here on are the holder's.

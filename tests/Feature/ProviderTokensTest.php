@@ -213,3 +213,13 @@ it('names the scopes the token was issued with', function (): void {
         ->and(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => 'openid managed']))->token->hasScope('manage'))->toBeFalse()
         ->and(app(ProviderTokens::class)->verify(testJwt($key, 'k1', ['scope' => null]))->token->scopes)->toBe([]);
 });
+
+it('takes clients by a prefix pattern, never by a lone star', function (): void {
+    config(['oidc.api_clients' => 'chat, agent-*, *']);
+
+    expect(ProviderTokens::knownClient('chat'))->toBeTrue()
+        ->and(ProviderTokens::knownClient('agent-reviewer'))->toBeTrue()
+        ->and(ProviderTokens::knownClient('agent-'))->toBeFalse()
+        ->and(ProviderTokens::knownClient('chatbot'))->toBeFalse()
+        ->and(ProviderTokens::knownClient('stranger'))->toBeFalse();
+});

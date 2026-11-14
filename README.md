@@ -132,7 +132,7 @@ token and lifetime in its array; `exchange()` gives the `TokenSet`.
 ```dotenv
 OIDC_API_TOKENS=true
 OIDC_API_AUDIENCE=my-api          # required; not OIDC_CLIENT_ID (see below)
-OIDC_API_CLIENTS=chat,mobile      # required: azp / client_id of the token
+OIDC_API_CLIENTS=chat,mobile      # required: azp / client_id of the token; agent-* — a prefix
 OIDC_API_GUARD=sanctum            # optional; the default guard otherwise
 ```
 
@@ -163,10 +163,15 @@ second try as something else. A token is taken when:
 | signed by a key of the issuer's JWKS, by `kid`; the key's `kty`, `alg`, `use` and EC curve match the algorithm | `signature` |
 | `iss` is the issuer | `issuer` |
 | `aud` holds `OIDC_API_AUDIENCE` | `audience` |
-| `azp` (else `client_id`) is in `OIDC_API_CLIENTS` | `client` |
+| `azp` (else `client_id`) is in `OIDC_API_CLIENTS` — by name, or by a prefix ending in `*` | `client` |
 | `exp` not passed, `nbf` reached (60 s leeway) | `expired`, `not_yet` |
 | `sub` names a person `SubjectUsers` returns | `subject` |
 | groups fresh enough (below) | `groups_stale` |
+
+Clients made on the fly (service accounts of agents, one per agent) are
+taken by a prefix: `OIDC_API_CLIENTS=chat,agent-*` takes `agent-reviewer`
+and `agent-writer`, not `agent-` itself; a lone `*` takes no client. Keep the
+prefix to clients only your provider's administrators can make.
 
 `OIDC_API_AUDIENCE` equal to `OIDC_CLIENT_ID` is ignored — a token for your
 own sign-in is not one for the API — unless
