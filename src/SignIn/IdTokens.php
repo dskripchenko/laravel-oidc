@@ -49,14 +49,14 @@ final readonly class IdTokens
             throw new ProviderError('id_token_invalid');
         }
         $claims = $jwt->claims;
-        $clientId = config('oidc.client_id');
+        $clientId = $this->client->clientId();
         $now = time();
         $leeway = self::leeway();
         $audience = $claims['aud'] ?? null;
         $audiences = is_string($audience) ? [$audience] : (is_array($audience) ? array_values($audience) : []);
         $azp = $claims['azp'] ?? null;
         $valid = is_string($claims['iss'] ?? null) && rtrim($claims['iss'], '/') === $this->client->issuer()
-            && is_string($clientId) && $clientId !== '' && in_array($clientId, $audiences, true)
+            && $clientId !== '' && in_array($clientId, $audiences, true)
             && ((count($audiences) === 1 && $azp === null) || $azp === $clientId)
             && is_int($claims['exp'] ?? null) && $now <= $claims['exp'] + $leeway
             && is_int($claims['iat'] ?? null) && $claims['iat'] <= $now + $leeway

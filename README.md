@@ -93,6 +93,33 @@ The leeway is `OIDC_ID_TOKEN_LEEWAY` seconds (`oidc.id_token_leeway`, 60 by
 default): the clock difference forgiven between this server and the
 provider. The validated claims are in `$result->idToken`.
 
+### More than one client
+
+An application may sign people in through several clients of the same
+provider — a web interface and a mobile gateway, for instance, each with its
+own redirect and audiences. Name the others in `oidc.clients`; each overrides
+`client_id`, `client_secret`, `redirect`, `callback_path` and `scopes`, the
+issuer stays the one of `oidc.issuer`:
+
+```php
+// config/oidc.php
+'clients' => [
+    'mobile' => [
+        'client_id' => env('OIDC_MOBILE_CLIENT_ID'),
+        'client_secret' => env('OIDC_MOBILE_CLIENT_SECRET'),
+        'callback_path' => '/mobile/auth/callback',
+    ],
+],
+```
+
+```php
+$mobile = app(OidcClient::class)->as('mobile');
+$flow = new SignInFlow($mobile, new IdTokens($mobile, app(IssuerKeys::class)));
+```
+
+The ID token is taken only when it is issued to that client. An unknown name,
+or one without a client ID, throws `ProviderError` (`client`).
+
 ## Calling APIs on behalf of the person
 
 An application that calls another API with the person's access token (a

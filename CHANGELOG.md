@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-16
+
+### Added
+- More than one client of the same provider: `oidc.clients.<name>` overrides
+  `client_id`, `client_secret`, `redirect`, `callback_path` and `scopes`, and
+  `OidcClient::as($name)` signs in, trades codes and refreshes as that client.
+  `OidcClient::clientId()` tells which client it is. An unknown name throws
+  `ProviderError` (`client`).
+
+### Changed
+- `IdTokens` takes an ID token issued to the client it was built with (the
+  default client, unless built with a named one), not always `oidc.client_id`.
+
 ## [0.5.0] — 2026-11-15
 
 ### Added
