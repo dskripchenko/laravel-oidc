@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-16
+
+### Added
+- More than one client of the same provider: `oidc.clients.<name>` overrides
+  `client_id`, `client_secret`, `redirect`, `callback_path` and `scopes`, and
+  `OidcClient::as($name)` signs in, trades codes and refreshes as that client.
+  `OidcClient::clientId()` tells which client it is. An unknown name throws
+  `ProviderError` (`client`).
+
+### Changed
+- `IdTokens` takes an ID token issued to the client it was built with (the
+  default client, unless built with a named one), not always `oidc.client_id`.
+
 ## [0.5.0] — 2026-11-15
 
 ### Added
@@ -92,7 +105,9 @@ First release.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
 
-[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.1.0...v0.2.0

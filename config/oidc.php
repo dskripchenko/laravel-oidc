@@ -16,6 +16,11 @@ return [
     'redirect' => env('OIDC_REDIRECT_URI'),
     'callback_path' => '/auth/oidc/callback',
     'scopes' => env('OIDC_SCOPES', 'openid profile email'),
+
+    // More clients of the same provider, signed in with OidcClient::as($name):
+    // each overrides client_id, client_secret, redirect, callback_path and scopes.
+    // 'clients' => ['mobile' => ['client_id' => env('OIDC_MOBILE_CLIENT_ID'), 'client_secret' => env('OIDC_MOBILE_CLIENT_SECRET'), 'callback_path' => '/mobile/auth/callback']],
+    'clients' => [],
     // Seconds of clock difference forgiven when the ID token's `exp` and
     // `iat` are checked.
     'id_token_leeway' => env('OIDC_ID_TOKEN_LEEWAY', 60),

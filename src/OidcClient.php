@@ -20,16 +20,56 @@ use Illuminate\Http\Client\Response;
  * The discovery document is kept an hour, and is taken only when its
  * `issuer` is the configured one: a document of another issuer speaks for
  * nobody.
+ *
+ * One application may sign people in through more than one client of the
+ * same provider (a web interface and a mobile gateway, say): `as($name)` is
+ * this client with the `client_id`, `client_secret`, `redirect`,
+ * `callback_path` and `scopes` of `oidc.clients.<name>` over the defaults.
  */
 final readonly class OidcClient
 {
     /** Seconds the discovery document is kept. */
     private const int DISCOVERY_FOR = 3600;
 
+    /** Settings that are not the defaults of config/oidc.php, see as(). */
+    private const array CLIENT_SETTINGS = ['client_id', 'client_secret', 'redirect', 'callback_path', 'scopes'];
+
+    /**
+     * @param  array<string, string>  $settings  Overrides of config/oidc.php for a named client
+     */
     public function __construct(
         private Http $http,
         private Cache $cache,
+        private array $settings = [],
     ) {}
+
+    /**
+     * The client named in `oidc.clients.<name>`: the same provider, its own
+     * client ID, secret, way back and scopes.
+     *
+     * @throws ProviderError client — no such client, or no client ID for it
+     */
+    public function as(string $name): self
+    {
+        $named = config("oidc.clients.{$name}");
+        if (! is_array($named) || ! is_string($named['client_id'] ?? null) || $named['client_id'] === '') {
+            throw new ProviderError('client');
+        }
+        $settings = [];
+        foreach (self::CLIENT_SETTINGS as $key) {
+            if (is_string($named[$key] ?? null)) {
+                $settings[$key] = $named[$key];
+            }
+        }
+
+        return new self($this->http, $this->cache, $settings);
+    }
+
+    /** The client ID this client signs in with. */
+    public function clientId(): string
+    {
+        return $this->option('client_id');
+    }
 
     /** On when an issuer and a client ID are set. */
     public static function enabled(): bool
@@ -54,8 +94,8 @@ final readonly class OidcClient
     /** Where the provider sends the person back. */
     public function redirectUri(): string
     {
-        $configured = self::setting('redirect');
-        $path = self::setting('callback_path');
+        $configured = $this->option('redirect');
+        $path = $this->option('callback_path');
 
         return $configured !== '' ? $configured : url($path !== '' ? $path : '/auth/oidc/callback');
     }
@@ -69,9 +109,9 @@ final readonly class OidcClient
     {
         $query = http_build_query([
             'response_type' => 'code',
-            'client_id' => self::setting('client_id'),
+            'client_id' => $this->option('client_id'),
             'redirect_uri' => $this->redirectUri(),
-            'scope' => self::setting('scopes'),
+            'scope' => $this->option('scopes'),
             'state' => $state,
             'nonce' => $nonce,
             'code_challenge' => self::challenge($verifier),
@@ -191,7 +231,7 @@ final readonly class OidcClient
     private function tokenRequest(array $form): Response
     {
         return $this->http->asForm()->acceptJson()->timeout(15)
-            ->withBasicAuth(self::setting('client_id'), self::setting('client_secret'))
+            ->withBasicAuth($this->option('client_id'), $this->option('client_secret'))
             ->post($this->endpoint('token_endpoint'), $form);
     }
 
@@ -218,6 +258,12 @@ final readonly class OidcClient
         });
 
         return $document;
+    }
+
+    /** A setting of this client: its own, else the default of config/oidc.php. */
+    private function option(string $key): string
+    {
+        return $this->settings[$key] ?? self::setting($key);
     }
 
     /** A string setting of config/oidc.php; empty when unset. */
