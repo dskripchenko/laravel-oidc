@@ -102,12 +102,15 @@ final readonly class OidcClient
 
     /**
      * The provider's sign-in page for this state, PKCE verifier and nonce.
+     * `$prompt` is OpenID Connect's `prompt` (Core, 3.1.2.1): `none` asks
+     * the provider to answer at once — signed in by its own session, or an
+     * error — without showing a page.
      *
      * @throws ProviderError
      */
-    public function authorizeUrl(string $state, string $verifier, string $nonce): string
+    public function authorizeUrl(string $state, string $verifier, string $nonce, ?string $prompt = null): string
     {
-        $query = http_build_query([
+        $query = http_build_query(array_filter([
             'response_type' => 'code',
             'client_id' => $this->option('client_id'),
             'redirect_uri' => $this->redirectUri(),
@@ -116,9 +119,36 @@ final readonly class OidcClient
             'nonce' => $nonce,
             'code_challenge' => self::challenge($verifier),
             'code_challenge_method' => 'S256',
-        ], '', '&', PHP_QUERY_RFC3986);
+            'prompt' => $prompt,
+        ], static fn (?string $value): bool => $value !== null), '', '&', PHP_QUERY_RFC3986);
 
         return $this->endpoint('authorization_endpoint').'?'.$query;
+    }
+
+    /**
+     * The provider's page that ends the person's session there (OpenID
+     * Connect RP-Initiated Logout 1.0), and with it — by back-channel
+     * logout — every application signed in through it. The provider sends
+     * the browser back to `$back`, which must be registered with it as a
+     * post-logout redirect URI; without the ID token hint it may ask the
+     * person to confirm. Null when the provider has no `end_session_endpoint`.
+     *
+     * @throws ProviderError discovery
+     */
+    public function logoutUrl(?string $idTokenHint = null, ?string $back = null, ?string $state = null): ?string
+    {
+        $endpoint = $this->discovery()['end_session_endpoint'] ?? null;
+        if (! is_string($endpoint) || $endpoint === '') {
+            return null;
+        }
+        $query = http_build_query(array_filter([
+            'client_id' => $this->option('client_id'),
+            'id_token_hint' => $idTokenHint,
+            'post_logout_redirect_uri' => $back,
+            'state' => $state,
+        ], static fn (?string $value): bool => $value !== null && $value !== ''), '', '&', PHP_QUERY_RFC3986);
+
+        return $endpoint.(str_contains($endpoint, '?') ? '&' : '?').$query;
     }
 
     /**

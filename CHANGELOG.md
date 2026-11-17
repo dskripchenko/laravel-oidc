@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-17
+
+### Added
+- Silent sign-in: `SignInFlow::start(..., silent: true)` asks the provider for
+  no page (`prompt=none`); its refusal (`login_required`,
+  `interaction_required`, `consent_required`, `account_selection_required`)
+  is `SilentSignInRefused` with the provider's error and the start's
+  context. `OidcClient::authorizeUrl()` takes a `prompt`.
+- `OidcClient::logoutUrl()`: the provider's page that ends its session
+  (RP-Initiated Logout 1.0) with the client, the ID token hint, the way back
+  and a state; null without an `end_session_endpoint`.
+- `SignOut\LogoutTokens`: the logout token of a back-channel logout
+  (Back-Channel Logout 1.0, 2.6) validated, its `jti` taken once;
+  `SignOut\LogoutToken` names the provider session (`sid`) or the person
+  (`sub`) to sign out. Reasons `logout_token_invalid`, `logout_token_replayed`.
+
 ## [0.6.0] — 2026-11-16
 
 ### Added
@@ -105,7 +121,8 @@ First release.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
 
-[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.3.0...v0.4.0

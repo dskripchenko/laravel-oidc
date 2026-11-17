@@ -80,7 +80,7 @@ it('keeps the discovery document an hour', function (): void {
     app(OidcClient::class)->endpoint('token_endpoint');
     app(OidcClient::class)->endpoint('userinfo_endpoint');
     Http::assertSentCount(1);
-    expect(fn () => app(OidcClient::class)->endpoint('end_session_endpoint'))->toThrow(ProviderError::class, '(endpoint)');
+    expect(fn () => app(OidcClient::class)->endpoint('revocation_endpoint'))->toThrow(ProviderError::class, '(endpoint)');
 });
 
 it('reads the groups from the configured claim', function (): void {

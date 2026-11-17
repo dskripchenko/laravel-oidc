@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Dskripchenko\Oidc\SignIn;
 
 use Dskripchenko\Oidc\Exceptions\ProviderError;
+use Dskripchenko\Oidc\Exceptions\SilentSignInRefused;
 use Dskripchenko\Oidc\Exceptions\StateMismatch;
 use Dskripchenko\Oidc\OidcClient;
 use Illuminate\Contracts\Session\Session;
@@ -21,11 +22,22 @@ use Illuminate\Support\Str;
  *
  * The application decides who the person is (an account by subject, by a
  * verified email, a new one) and opens its session.
+ *
+ * A silent sign-in (`start(..., silent: true)`, `prompt=none`) shows the
+ * person nothing: signed in to the provider — they come back signed in;
+ * not — the provider says so at once and finish() throws
+ * SilentSignInRefused, and the application shows its own sign-in page.
  */
 final readonly class SignInFlow
 {
     /** The session key of a sign-in in progress. */
     public const string SESSION_KEY = 'oidc';
+
+    /**
+     * The errors a provider answers a silent sign-in with when it would have
+     * to show the person a page (OpenID Connect Core, 3.1.2.6).
+     */
+    public const array SILENT_REFUSALS = ['login_required', 'interaction_required', 'consent_required', 'account_selection_required'];
 
     public function __construct(
         private OidcClient $client,
@@ -34,25 +46,27 @@ final readonly class SignInFlow
 
     /**
      * The provider's sign-in page; the context comes back with the result.
+     * Silent: the provider shows no page (`prompt=none`), see the class.
      *
      * @param  array<string, mixed>  $context  Plain data the application needs at the callback
      *
      * @throws ProviderError
      */
-    public function start(Session $session, array $context = []): string
+    public function start(Session $session, array $context = [], bool $silent = false): string
     {
         $state = Str::random(40);
         $verifier = Str::random(64);
         $nonce = Str::random(32);
-        $session->put(self::SESSION_KEY, ['state' => $state, 'verifier' => $verifier, 'nonce' => $nonce, 'context' => $context]);
+        $session->put(self::SESSION_KEY, ['state' => $state, 'verifier' => $verifier, 'nonce' => $nonce, 'context' => $context, 'silent' => $silent]);
 
-        return $this->client->authorizeUrl($state, $verifier, $nonce);
+        return $this->client->authorizeUrl($state, $verifier, $nonce, $silent ? 'none' : null);
     }
 
     /**
      * The callback: the state checked, the code traded.
      *
      * @throws StateMismatch the state is not the one the session started with
+     * @throws SilentSignInRefused a silent sign-in, and the provider would have shown a page
      * @throws ProviderError the provider sent an error or no code (`callback`), no ID token
      *                       (`id_token_missing`), one that does not pass (`id_token_invalid`,
      *                       `nonce_mismatch`), userinfo of another subject (`sub_mismatch`),
@@ -67,10 +81,15 @@ final readonly class SignInFlow
         if (! is_string($state) || ! is_string($verifier) || ! is_string($nonce) || ! hash_equals($state, $request->string('state')->toString())) {
             throw new StateMismatch;
         }
-        if ($request->filled('error') || ! $request->filled('code')) {
+        /** @var array<string, mixed> $context */
+        $context = is_array($expected['context'] ?? null) ? $expected['context'] : [];
+        $error = $request->string('error')->toString();
+        if (($expected['silent'] ?? false) === true && in_array($error, self::SILENT_REFUSALS, true)) {
+            throw new SilentSignInRefused($error, $context);
+        }
+        if ($error !== '' || ! $request->filled('code')) {
             throw new ProviderError('callback');
         }
-        $context = is_array($expected['context'] ?? null) ? $expected['context'] : [];
         $tokens = $this->client->exchange($request->string('code')->toString(), $verifier);
         if ($tokens->idToken === null) {
             throw new ProviderError('id_token_missing');
@@ -82,7 +101,6 @@ final readonly class SignInFlow
             throw new ProviderError('sub_mismatch');
         }
 
-        /** @var array<string, mixed> $context */
         return new SignInResult($user, $context, $claims, $tokens);
     }
 }

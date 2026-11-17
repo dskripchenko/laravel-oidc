@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Dskripchenko\Oidc\Jose\Jwt;
+use Dskripchenko\Oidc\SignOut\LogoutTokens;
 use Illuminate\Support\Facades\Http;
 
 const TEST_ISSUER = 'https://sso.example.test';
@@ -104,6 +105,8 @@ function fakeProvider(array $keys = [], array $userinfo = ['sub' => 'u-ada'], st
             'token_endpoint' => TEST_ISSUER.'/token',
             'userinfo_endpoint' => TEST_ISSUER.'/userinfo',
             'jwks_uri' => TEST_ISSUER.'/jwks',
+            // A provider without RP-initiated logout when `test.no_end_session` is bound.
+            'end_session_endpoint' => app()->bound('test.no_end_session') ? null : TEST_ISSUER.'/logout',
         ]),
         // The ID token the test put in `test.id_token`, if any.
         TEST_ISSUER.'/token' => static fn () => Http::response(array_filter([
@@ -126,4 +129,21 @@ function idToken(OpenSSLAsymmetricKey $key, string $nonce, array $claims = [], a
     return testJwt($key, 'sign', [
         'aud' => 'app', 'azp' => null, 'sub' => 'u-ada', 'iat' => time(), 'exp' => time() + 300, 'nonce' => $nonce, ...$claims,
     ], ['typ' => 'JWT', ...$header]);
+}
+
+/**
+ * A logout token of TEST_ISSUER for the client `app`, as a provider sends
+ * it on a back-channel logout.
+ *
+ * @param  array<string, mixed>  $claims  null drops a claim
+ * @param  array<string, mixed>  $header
+ */
+function logoutToken(OpenSSLAsymmetricKey $key, array $claims = [], array $header = []): string
+{
+    $all = [
+        'aud' => 'app', 'azp' => null, 'sub' => 'u-ada', 'sid' => 's-1', 'iat' => time(), 'exp' => time() + 120,
+        'jti' => bin2hex(random_bytes(8)), 'events' => [LogoutTokens::EVENT => new stdClass], ...$claims,
+    ];
+
+    return testJwt($key, 'sign', $all, ['typ' => 'logout+jwt', ...$header]);
 }
