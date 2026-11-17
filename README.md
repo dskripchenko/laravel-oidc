@@ -185,7 +185,7 @@ provider session (`sid`) — or, without one, every session of the person
 ```php
 use Dskripchenko\Oidc\SignOut\LogoutTokens;
 
-Route::post('/auth/oidc/logout', function (Request $request, LogoutTokens $tokens) {
+Route::post('/auth/oidc/backchannel-logout', function (Request $request, LogoutTokens $tokens) {
     try {
         $logout = $tokens->validate($request->string('logout_token')->toString());
     } catch (OidcException) {
