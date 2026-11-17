@@ -93,6 +93,36 @@ The leeway is `OIDC_ID_TOKEN_LEEWAY` seconds (`oidc.id_token_leeway`, 60 by
 default): the clock difference forgiven between this server and the
 provider. The validated claims are in `$result->idToken`.
 
+### Silent sign-in
+
+A person signed in to the provider — in another application of the same
+provider — need not press "Sign in" again. Without a session of its own the
+application starts a silent sign-in (`prompt=none`): the provider shows no
+page, and answers at once.
+
+```php
+use Dskripchenko\Oidc\Exceptions\SilentSignInRefused;
+
+// No session here, no refusal remembered, not just signed out:
+return redirect()->away($flow->start($request->session(), ['back' => $back], silent: true));
+
+// The callback:
+try {
+    $result = $flow->finish($request);
+} catch (SilentSignInRefused $e) {      // not signed in to the provider
+    $request->session()->put('sso_silent_refused', true); // no loop
+    return redirect('/login?redirect='.urlencode($e->context['back']));
+}
+```
+
+`SilentSignInRefused` (`reason()` `silent_refused`) carries the provider's
+`error` — `login_required`, `interaction_required`, `consent_required` or
+`account_selection_required` (`SignInFlow::SILENT_REFUSALS`) — and the
+`context` of the start. It is thrown only for a sign-in started silent; any
+other error, and the same errors after a sign-in that was not silent, stay
+`ProviderError` (`callback`). Do not start a silent sign-in again in the
+session that was refused, nor right after the person signed out.
+
 ### More than one client
 
 An application may sign people in through several clients of the same
@@ -119,6 +149,64 @@ $flow = new SignInFlow($mobile, new IdTokens($mobile, app(IssuerKeys::class)));
 
 The ID token is taken only when it is issued to that client. An unknown name,
 or one without a client ID, throws `ProviderError` (`client`).
+
+## Signing out everywhere
+
+### Ending the provider's session
+
+Closing the application's own session leaves the person signed in to the
+provider — and to every other application. `logoutUrl()` is the provider's
+page that ends its session (RP-Initiated Logout 1.0); by back-channel logout
+the provider then tells the other applications.
+
+```php
+$idToken = $request->session()->get('oidc_id_token'); // kept at sign-in: $result->tokens->idToken
+Auth::logout();
+$request->session()->invalidate();
+$url = app(OidcClient::class)->logoutUrl($idToken, url('/login?out=1'));
+
+return $url !== null ? redirect()->away($url) : redirect('/login?out=1');
+```
+
+It carries `client_id`, `id_token_hint`, `post_logout_redirect_uri` (register
+it with the provider) and an optional `state`. Null when the provider's
+discovery document has no `end_session_endpoint`.
+
+### Back-channel logout
+
+The provider POSTs a logout token (form field `logout_token`) to the URL
+registered for the client when a session there ends: the person signed out
+elsewhere, an administrator ended it, it expired. `LogoutTokens` validates it
+(Back-Channel Logout 1.0, 2.6); the application ends its sessions of that
+provider session (`sid`) — or, without one, every session of the person
+(`sub`). Keep the ID token's `sid` and `sub` with the session at sign-in
+(`$result->idToken`).
+
+```php
+use Dskripchenko\Oidc\SignOut\LogoutTokens;
+
+Route::post('/auth/oidc/logout', function (Request $request, LogoutTokens $tokens) {
+    try {
+        $logout = $tokens->validate($request->string('logout_token')->toString());
+    } catch (OidcException) {
+        return response('', 400)->header('Cache-Control', 'no-store');
+    }
+    // end the sessions with $logout->sessionId, else of $logout->subject
+    return response('', 200)->header('Cache-Control', 'no-store');
+})->withoutMiddleware(VerifyCsrfToken::class);
+```
+
+| Check | Reason of the `ProviderError` |
+|---|---|
+| signed with RS256 or ES256 by a key of the issuer's JWKS; never `none` | `logout_token_invalid` |
+| `iss` is the configured issuer; `aud` and `azp` as for an ID token | `logout_token_invalid` |
+| `iat` not in the future; `exp`, when present, not passed; without `exp`, `iat` not older than `LogoutTokens::MAX_AGE` (300 s); give or take the leeway | `logout_token_invalid` |
+| a `jti`; a `sub` or a `sid`; the event `http://schemas.openid.net/event/backchannel-logout` in `events`; no `nonce` | `logout_token_invalid` |
+| the `jti` not seen before (kept in the cache until the token would expire) | `logout_token_replayed` |
+
+For a named client, build it with that client — the token's audience is the
+client the session was opened with:
+`new LogoutTokens($client->as('mobile'), app(IssuerKeys::class), app('cache.store'))`.
 
 ## Calling APIs on behalf of the person
 
@@ -263,7 +351,8 @@ and only if `GroupSync::followsGroups()`.
 
 All implement `Exceptions\OidcException` with a short `reason()`:
 `ProviderError` (`discovery`, `endpoint`, `token`, `refresh`, `refresh_rejected`,
-`userinfo`, `callback`),
+`userinfo`, `callback`, `logout_token_invalid`, `logout_token_replayed`),
+`SilentSignInRefused` (`silent_refused`),
 `StateMismatch` (`state`), `TokenRejected` (401, reasons above),
 `TooManyAttempts` (429).
 
