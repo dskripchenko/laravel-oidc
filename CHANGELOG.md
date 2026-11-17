@@ -6,6 +6,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-17
+
+### Fixed
+- The release of 0.7.0's changes. Packagist took `v0.7.0` from a tag first
+  pushed by mistake on 0.6.0's commit and keeps it there: do not use 0.7.0.
+  The code is the same as on GitHub's `v0.7.0`.
+
 ## [0.7.0] — 2026-11-17
 
 ### Added
@@ -121,7 +128,8 @@ First release.
 - Exceptions `ProviderError`, `StateMismatch`, `TokenRejected` (401),
   `TooManyAttempts` (429), all `OidcException` with `reason()`.
 
-[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/dskripchenko/laravel-oidc/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/dskripchenko/laravel-oidc/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dskripchenko/laravel-oidc/compare/v0.4.0...v0.5.0
